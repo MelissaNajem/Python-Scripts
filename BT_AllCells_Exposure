@@ -1,0 +1,112 @@
+"""
+Created on 2021/May/31
+
+@author: Franck
+
+Creation of matrix of bowties for different bowties size and spacing over 100x100μm2:
+    17 sizes
+    5 spacing
+All the bowties are in the same cell (AREF function do not allows dose factor variation)
+Text was added at:
+    the bottom of each combination matrix: size /spacing
+All dimensions are in micrometers
+Dose factors were determined and will be introduced manually in the drawing using KLAYOUT.
+"""
+
+import gdspy
+import math
+
+
+def gratingOfBowties(sideLength, space, dataType):
+    '100μm x 100μm (rounded) grating of lines (2μm distance) with identical bowties using their size (sidelength) spacing (space)and dose factor (dataType)'
+
+    # triangle height calculation
+    height = sideLength*math.sqrt(3)/2
+
+    # polygon creation of the first bowtie triangle
+    points_1 = [(0, 0), (sideLength, 0), (sideLength/2, height)]
+    tie_1 = gdspy.Polygon(points_1)
+
+    # polygon creation of the second bowtie triangle
+    points_2 = [((sideLength/2), (height + space)), (sideLength, ((2*height)+space)), (0, ((2*height)+space))]
+    tie_2 = gdspy.Polygon(points_2)
+
+    # assembling the 2 ties with the right spacing to create the bowtie
+    BT = gdspy.boolean(tie_1, tie_2, 'xor', layer=1, datatype=dataType)
+    copies_BT = ()
+
+    # Copie de n lignes séparées de 2μm pour couvrir 100um
+    for j in range(int(100/((height*2) + space + lineDist))):
+
+        # create a line of bowties over 100um max.
+        for i in range(int(100/(sideLength + space))):
+            copy_BT = gdspy.copy(BT, (i*(sideLength + space)), j*((height*2) + space + lineDist))
+            copies_BT = gdspy.boolean(copies_BT, copy_BT, 'xor', layer=1, datatype=dataType)
+        #
+    return (copies_BT)
+
+# Doses test organization :
+#   1 bowtie size/distance combination is repeated over 25um in X direction
+#   each previous line is repeated in Y with a different dose
+#   each size/distance combination test dose is located every 50um in X and Y
+#   all the bowties of the same size are on the same line (offsetX variation) with different spacing d
+#   offsetY is used to locate the different bowtie size in Y
+
+
+gdspy.current_library = gdspy.GdsLibrary()
+
+
+# parameters initialization:
+# triangle side length list, distance list, (dose factor list), line separation, x & Y position offset
+sideLengthList = [2.0, 1.9, 1.8, 1.7, 1.6, 1.5, 1.4, 1.3, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3]
+dList = [0.02, 0.04, 0.06, 0.08, 0.1]
+doseFactorList = [1.8, 2.1, 1.9, 2.0, 2.1,
+                  1.8, 1.9, 2.2, 2.4, 2.2,
+                  2.0, 2.1, 2.2, 2.3, 2.3,
+                  1.9, 2.3, 2.2, 2.2, 2.2,
+                  1.9, 2.0, 2.2, 2.2, 2.3,
+                  2.1, 2.3, 2.5, 2.4, 2.5,
+                  2.2, 2.5, 2.5, 2.5, 2.5,
+                  2.1, 2.5, 2.5, 2.5, 2.5,
+                  2.5, 2.5, 2.5, 2.5, 2.5,
+                  2.3, 2.5, 2.5, 2.5, 2.5,
+                  2.5, 2.5, 2.5, 2.5, 2.5,
+                  2.4, 2.5, 2.5, 2.5, 2.5,
+                  2.3, 2.4, 2.5, 2.5, 2.5,
+                  2.5, 2.5, 2.5, 2.5, 2.5,
+                  2.4, 2.5, 2.5, 2.5, 2.5,
+                  2.5, 2.5, 2.5, 2.5, 2.4,
+                  2.5, 2.5, 2.5, 2.5, 2.5,
+                  2.5, 2.5, 2.5, 2.5, 2.5]
+lineDist = 2
+offsetX = 0
+offsetY = 0
+#
+
+# library opening
+all_BTs = gdspy.GdsLibrary().new_cell('All_BTs')
+#
+
+# program's core:
+# loop on the different side-length
+for i in range(len(sideLengthList)):
+# for i in range(0, 2):
+    sideLength = sideLengthList[i]
+    offsetY = i*300
+    # loop on the distance list
+    for j in range(len(dList)):
+    # for j in range(0, 2):
+        offsetX = j*300
+        dataType = int(doseFactorList[(i*5)+j]*1000)
+        # add text BT size/space at X=50 et Y=-5 for each group of dose test
+        htextGroup = gdspy.Text(str(sideLength)+'/'+str(dList[j]), 2, position=(50+offsetX, offsetY-5), datatype=1500)
+        all_BTs.add(htextGroup)
+        gOB = gratingOfBowties(sideLength, dList[j], dataType)
+        gOB.translate(offsetX, offsetY)
+        all_BTs.add(gOB)
+
+# ------------------------------------------------------------------ #
+#      SAVE
+# ------------------------------------------------------------------ #
+# Save all created cells in file
+gdspy.write_gds('C:\\Public\\E-BEAM\\Franck\\GDSII\\RENATECH\\Taliercio\\Melissa\\BTs\\BTs_FinalExpose_FC-V2.gds')
