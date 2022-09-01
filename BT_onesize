@@ -1,0 +1,79 @@
+"""
+Created on 2021/May/31
+
+@author: Franck
+
+Creation of matrix of bowties 80nm size and spacing 100, 60, 20nm over 100x100μm2:
+    
+All the bowties are in the same cell (AREF function do not allows dose factor variation)
+Text was added at:
+    the bottom of each combination matrix: size /spacing
+All dimensions are in micrometers
+Dose factors were determined and will be introduced manually in the drawing using KLAYOUT.
+"""
+
+import gdspy
+import math
+
+
+# Doses test organization :
+#   1 bowtie size/distance combination is repeated over 25um in X direction
+#   each previous line is repeated in Y with a different dose
+#   each size/distance combination test dose is located every 50um in X and Y
+#   all the bowties of the same size are on the same line (offsetX variation) with different spacing d
+#   offsetY is used to locate the different bowtie size in Y
+
+
+gdspy.current_library = gdspy.GdsLibrary()
+
+
+# parameters initialization:
+# triangle side length list, distance list, (dose factor list), line separation, x & Y position offset
+dList = [0.02, 0.06, 0.1]
+lineDist = 2
+offsetX = 0
+offsetY = 0
+dataType = 2500
+#
+
+# library opening
+BTs150nm = gdspy.GdsLibrary().new_cell('80nm_BTs')
+# program's core:
+# loop on the different side-length
+sideLength = 0.080
+# loop on the distance list
+for i in range(len(dList)):
+    print('Distance en nm :', dList[i])
+    offsetX = i*600
+    # add text BT size/space at X=50 et Y=-5 for each group of dose test
+    htextGroup = gdspy.Text(str(sideLength)+'/'+str(dList[i]), 2, position=(50+offsetX, offsetY-5), datatype=1500)
+    BTs150nm.add(htextGroup)
+
+    # triangle height calculation
+    height = sideLength*math.sqrt(3)/2
+
+    # polygon creation of the first bowtie triangle
+    points_1 = [(0, 0), (sideLength, 0), (sideLength/2, height)]
+    tie_1 = gdspy.Polygon(points_1)
+
+    # polygon creation of the second bowtie triangle
+    points_2 = [((sideLength/2), (height + dList[i])), (sideLength, ((2*height)+dList[i])), (0, ((2*height)+dList[i]))]
+    tie_2 = gdspy.Polygon(points_2)
+
+    # assembling the 2 ties with the right spacing to create the bowtie
+    BT = gdspy.boolean(tie_1, tie_2, 'xor', layer=1, datatype=dataType)
+    copies_BT = ()
+
+    # create a line of bowties over 100um max.
+    for k in range(int(100/(sideLength + dList[i]))):
+        copy_BT = gdspy.copy(BT, (k*(sideLength + dList[i])), 0)
+        copies_BT = gdspy.boolean(copies_BT, copy_BT, 'xor', layer=1, datatype=dataType)
+        #
+    copies_BT.translate(offsetX, offsetY)
+    BTs150nm.add(copies_BT)
+
+# ------------------------------------------------------------------ #
+#      SAVE
+# ------------------------------------------------------------------ #
+# Save all created cells in file
+gdspy.write_gds('C:\\Public\\BTs_80nmExpose_FC-V1.gds')
