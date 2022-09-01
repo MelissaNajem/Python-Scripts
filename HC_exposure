@@ -1,0 +1,115 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Jan 14 2021
+
+@author: fcarcena
+"""
+import gdspy
+import numpy
+import copy
+from math import *
+
+# Erase all parameters stored in the current_library coming from a previous run
+gdspy.current_library = gdspy.GdsLibrary()
+
+# define units
+
+nm = 1.
+um = 1000 * nm
+mm = 1000 * um
+
+# The GDSII file is called a library, which contains multiple cells.
+# unit=1e-9 refer to nm : all number will refer to nm dimensions and can be changed by using *um or *mm
+# precision=1e-9 refer to nm
+lib = gdspy.GdsLibrary("HONEYCOMBS_DoseTest", unit=1e-9, precision=1e-9)
+
+''' parameters initialization '''
+# pathLength is used to define the width of the reference line grating that will be used to define the triangles by copy/rotation combination
+pathLength = 10*um
+doseFactor = 1.0
+dfStep = 0.3
+layer = 1
+pi = numpy.pi
+rcX = 0
+rcY = 0
+# list of the honeycomb base triangle size to achieve
+hcTriangleSize_list = [2000, 1900, 1800, 1700, 1600, 1500, 1400, 1300, 1200, 1000, 900, 800, 700, 600, 500, 400, 300]
+
+# list of the triangle separation to achieve
+hcDistance_list = [20, 40, 60, 80, 100]
+
+# main cell creation: HC_DoseTestExpose
+expose = lib.new_cell('HC_DoseTestExpose')
+
+'''Program’s core'''
+
+''' Loop on Triangle size hcTriangleSize '''
+for ts in range(len(hcTriangleSize_list)):
+    rcX = ts * 100000
+    rcY = 0
+    '''loop on separation distance hcDistance'''
+    for sd in range(len(hcDistance_list)):
+        # add text HC size/space at X=rotation center X (rcX) et Y=rotation center Y - 2 grating length for each group of dose test
+        htextGroup = gdspy.Text(str(hcTriangleSize_list[ts])+'/'+str(hcDistance_list[sd]), 1000, position=((rcX-(pathLength/4)), -(2*pathLength)), datatype=1500)
+        expose.add(htextGroup)
+
+        '''loop on different doses factor df'''
+        for df in range(16):
+
+            ''' Defining the grating pitch using hcTriangleSize and hcDistance'''
+            hcPitch = floor((hcTriangleSize_list[ts]*sin(pi/3)) + (hcDistance_list[sd]*1.5))
+
+            ''' Defining the HC parameters nb of lines, lines’ pitch, rotation center X'''
+            nbRows = floor(pathLength/hcPitch)
+            if (nbRows % 2) == 0:
+                nbRows = nbRows + 1
+            rcY = df * 2 * pathLength
+
+            ''' Defining the separation line using a path of variable width (hcDistance)
+            using a PATH centered in (0,0) separation between triangles managed by WIDTH parameter
+            and fixing the dose factor for the entire HC'''
+            firstPoint = (-floor(pathLength/2), 0)
+            LastPoint = (floor(pathLength/2), 0)
+            # creation of a list (not an array!) necessary for FlexPath fonction
+            # in order to determine the number of lines (nbRows) from hcDistance_list width
+            # separated by offset (hcPitch)
+            distanceList = [hcDistance_list[sd] - 20] * nbRows
+
+            # creating the reference grating of horizontal lines
+            grating0 = gdspy.FlexPath(
+                [firstPoint, LastPoint],
+                distanceList,
+                offset=hcPitch,
+                tolerance=1,
+                precision=1,
+                gdsii_path=True,
+                layer=1,
+                datatype=int((doseFactor + (df*dfStep))*1000),
+            )
+            # positionning reference grating
+            grating0.translate(rcX, rcY)
+            # saving reference grating
+            expose.add(grating0)
+
+            # Defining 2 gratings of lines at 60° and 120° angle centered on reference grating
+            grating60 = copy.copy(grating0).rotate(pi/3, center=(rcX, rcY))
+            expose.add(grating60)
+            grating120 = copy.copy(grating0).rotate(2*pi/3, center=(rcX, rcY))
+            expose.add(grating120)
+            ''' end of loop on dose factor'''
+        rcX = rcX + (2 * pathLength)
+
+    ''' end of the loop on HC triangles’ distance'''
+''' end of loop on HC triangles’ size '''
+
+# Save to a gds file and check out the output
+fname = '\\\\cubitus\\E-BEAM\\Franck\\GDSII\\RENATECH\\ThierryTaliercio\\Melissa\\Expose_HC_TestDoses-V2.gds'
+
+lib.write_gds(fname)
+# gdspy.LayoutViewer(lib)
+
+
+
+##import gds2txt
+ # Affichage du gds en txt
+##gds2txt.main(fname)
